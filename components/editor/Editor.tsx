@@ -4,12 +4,15 @@ import { getContent, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
 import { applyTextDiff } from "@/lib/crdt/text";
 import { renameDocument } from "@/lib/local/repo";
+import SyncIndicator from "./SyncIndicator";
+import { useSync } from "./useSync";
 import { useYDoc } from "./useYDoc";
 
 export default function Editor({ docId }: { docId: string }) {
   const { doc, ready } = useYDoc(docId);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const syncStatus = useSync(docId, doc, ready, title);
 
   // Mirror Yjs into React state; remote/load changes refresh the inputs, local edits don't (no caret jump).
   useEffect(() => {
@@ -56,6 +59,9 @@ export default function Editor({ docId }: { docId: string }) {
 
   return (
     <div className="flex flex-1 flex-col gap-3">
+      <div className="flex justify-end">
+        <SyncIndicator status={syncStatus} />
+      </div>
       <label htmlFor="doc-title" className="sr-only">
         Document title
       </label>

@@ -15,6 +15,13 @@
       "when": 1782804874008,
       "tag": "0001_rls_and_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782808137156,
+      "tag": "0002_sync_helpers",
+      "breakpoints": true
     }
   ]
 }
