@@ -29,6 +29,13 @@
       "when": 1782809109468,
       "tag": "0003_members",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782810878889,
+      "tag": "0004_compaction",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { withUser } from "@/lib/db/client";
 import { isRlsDenial } from "@/lib/db/errors";
 import { readBoundedText } from "@/lib/http/read-body";
 import { fromBase64 } from "@/lib/sync/base64";
+import { COMPACT_THRESHOLD, compactDocument } from "@/lib/sync/compaction";
 import { pushSchema } from "@/lib/validation/sync";
 
 // Hard ceiling on the streamed body — OOM defense that a missing/forged Content-Length can't bypass.
@@ -55,10 +56,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ docId:
         )) as unknown as Array<{ seq: number | string }>;
         seqs.push(Number(row[0].seq));
       }
-      return { forbidden: false as const, seqs };
+      const countRows = (await tx.execute(
+        sql`select count(*)::int as n from document_updates where document_id = ${docId}`,
+      )) as unknown as Array<{ n: number }>;
+      return { forbidden: false as const, seqs, shouldCompact: Number(countRows[0].n) > COMPACT_THRESHOLD };
     });
 
     if (result.forbidden) return Response.json({ error: "forbidden" }, { status: 403 });
+    // Bound state growth without delaying the response.
+    if (result.shouldCompact) {
+      after(() => compactDocument(docId, session.userId).catch((e) => console.error("compaction failed", e)));
+    }
     return Response.json({ seqs: result.seqs, latestSeq: result.seqs.length ? Math.max(...result.seqs) : 0 });
   } catch (err) {
     // RLS blocks Viewers and non-members from pushing.
