@@ -22,6 +22,13 @@
       "when": 1782808137156,
       "tag": "0002_sync_helpers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782809109468,
+      "tag": "0003_members",
+      "breakpoints": true
     }
   ]
 }

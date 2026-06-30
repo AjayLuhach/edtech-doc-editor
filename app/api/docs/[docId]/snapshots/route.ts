@@ -3,14 +3,11 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { withUser } from "@/lib/db/client";
+import { isRlsDenial } from "@/lib/db/errors";
 import { fromBase64 } from "@/lib/sync/base64";
 import { snapshotSchema } from "@/lib/validation/versions";
 
 const MAX_BODY = 8_000_000;
-
-function isRlsDenial(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "42501";
-}
 
 // Create a version snapshot (editors/owners only — enforced by RLS WITH CHECK).
 export async function POST(request: NextRequest, ctx: { params: Promise<{ docId: string }> }) {

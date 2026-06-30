@@ -3,15 +3,12 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { withUser } from "@/lib/db/client";
+import { isRlsDenial } from "@/lib/db/errors";
 import { fromBase64 } from "@/lib/sync/base64";
 import { pushSchema } from "@/lib/validation/sync";
 
 // Hard ceiling before we even read the body — first line of OOM defense.
 const MAX_BODY = 2_000_000;
-
-function isRlsDenial(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "42501";
-}
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ docId: string }> }) {
   const session = await getSession();
