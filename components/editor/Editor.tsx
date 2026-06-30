@@ -1,5 +1,6 @@
 "use client";
 import { type ChangeEvent, useEffect, useState } from "react";
+import { FiClock } from "react-icons/fi";
 import { getContent, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
 import { applyTextDiff } from "@/lib/crdt/text";
@@ -7,11 +8,13 @@ import { renameDocument } from "@/lib/local/repo";
 import SyncIndicator from "./SyncIndicator";
 import { useSync } from "./useSync";
 import { useYDoc } from "./useYDoc";
+import VersionHistory from "./VersionHistory";
 
 export default function Editor({ docId }: { docId: string }) {
   const { doc, ready } = useYDoc(docId);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const syncStatus = useSync(docId, doc, ready, title);
 
   // Mirror Yjs into React state; remote/load changes refresh the inputs, local edits don't (no caret jump).
@@ -59,9 +62,19 @@ export default function Editor({ docId }: { docId: string }) {
 
   return (
     <div className="flex flex-1 flex-col gap-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setShowHistory((v) => !v)}
+          aria-expanded={showHistory}
+          className="flex items-center gap-1.5 rounded-lg border border-black/15 px-3 py-1.5 text-sm transition-colors hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+        >
+          <FiClock aria-hidden className="h-4 w-4" />
+          History
+        </button>
         <SyncIndicator status={syncStatus} />
       </div>
+      {showHistory && <VersionHistory docId={docId} doc={doc} onClose={() => setShowHistory(false)} />}
       <label htmlFor="doc-title" className="sr-only">
         Document title
       </label>
