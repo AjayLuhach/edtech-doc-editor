@@ -4,10 +4,11 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { withUser } from "@/lib/db/client";
 import { isRlsDenial } from "@/lib/db/errors";
+import { readBoundedText } from "@/lib/http/read-body";
 import { fromBase64 } from "@/lib/sync/base64";
 import { pushSchema } from "@/lib/validation/sync";
 
-// Hard ceiling before we even read the body — first line of OOM defense.
+// Hard ceiling on the streamed body — OOM defense that a missing/forged Content-Length can't bypass.
 const MAX_BODY = 2_000_000;
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ docId: string }> }) {
@@ -17,20 +18,24 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ docId:
   const { docId } = await ctx.params;
   if (!z.uuid().safeParse(docId).success) return Response.json({ error: "invalid id" }, { status: 400 });
 
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) {
-    return Response.json({ error: "payload too large" }, { status: 413 });
-  }
+  const text = await readBoundedText(request, MAX_BODY);
+  if (text === null) return Response.json({ error: "payload too large" }, { status: 413 });
 
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(text);
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
   const parsed = pushSchema.safeParse(raw);
   if (!parsed.success) return Response.json({ error: "invalid payload" }, { status: 400 });
 
-  const updates = parsed.data.updates.map(fromBase64);
+  let updates: Uint8Array[];
+  try {
+    updates = parsed.data.updates.map(fromBase64);
+  } catch {
+    return Response.json({ error: "invalid update encoding" }, { status: 400 });
+  }
   const { title } = parsed.data;
 
   try {

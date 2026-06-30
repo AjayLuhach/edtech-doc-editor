@@ -26,6 +26,9 @@ export async function registerAction(_prev: AuthState, formData: FormData): Prom
   redirect("/documents");
 }
 
+// A real cost-12 hash so the not-found branch does equivalent work (no timing oracle for enumeration).
+const DUMMY_HASH = "$2b$12$F7fY10iqkQEi7xoUHlvC3.QZpGphH4gpJZIdjecffixRrMXCTVsui";
+
 export async function loginAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = credentialsSchema.safeParse({
     email: formData.get("email"),
@@ -38,7 +41,7 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
   // Verify even when not found to keep timing similar and avoid leaking which emails exist.
   const ok = found
     ? await verifyPassword(parsed.data.password, found.passwordHash)
-    : await verifyPassword(parsed.data.password, "$2a$12$0000000000000000000000000000000000000000000000000000");
+    : await verifyPassword(parsed.data.password, DUMMY_HASH);
   if (!found || !ok) return { error: "Invalid email or password." };
 
   await createSession({ userId: found.id, name: found.name, email });

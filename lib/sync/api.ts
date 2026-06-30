@@ -20,14 +20,14 @@ export async function pushUpdates(docId: string, updates: Uint8Array[], title?: 
   return res.json();
 }
 
-export type PullResult = { updates: { seq: number; data: Uint8Array }[]; latestSeq: number };
-
-export async function pullUpdates(docId: string, since: number): Promise<PullResult> {
-  const res = await fetch(`/api/docs/${docId}/pull?since=${since}`, { method: "GET" });
+// Send our state vector, receive exactly the updates we are missing (an empty diff if we are current).
+export async function pullDiff(docId: string, stateVector: Uint8Array): Promise<Uint8Array> {
+  const res = await fetch(`/api/docs/${docId}/pull`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sv: toBase64(stateVector) }),
+  });
   if (!res.ok) throw new SyncError(res.status);
-  const json = (await res.json()) as { updates: { seq: number; data: string }[]; latestSeq: number };
-  return {
-    updates: json.updates.map((u) => ({ seq: u.seq, data: fromBase64(u.data) })),
-    latestSeq: json.latestSeq,
-  };
+  const json = (await res.json()) as { diff: string };
+  return fromBase64(json.diff);
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { withUser } from "@/lib/db/client";
 import { isRlsDenial } from "@/lib/db/errors";
+import { readBoundedText } from "@/lib/http/read-body";
 import { fromBase64 } from "@/lib/sync/base64";
 import { snapshotSchema } from "@/lib/validation/versions";
 
@@ -16,20 +17,25 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ docId:
 
   const { docId } = await ctx.params;
   if (!z.uuid().safeParse(docId).success) return Response.json({ error: "invalid id" }, { status: 400 });
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) {
-    return Response.json({ error: "payload too large" }, { status: 413 });
-  }
+
+  const text = await readBoundedText(request, MAX_BODY);
+  if (text === null) return Response.json({ error: "payload too large" }, { status: 413 });
 
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(text);
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
   const parsed = snapshotSchema.safeParse(raw);
   if (!parsed.success) return Response.json({ error: "invalid payload" }, { status: 400 });
 
-  const state = fromBase64(parsed.data.state);
+  let state: Uint8Array;
+  try {
+    state = fromBase64(parsed.data.state);
+  } catch {
+    return Response.json({ error: "invalid state encoding" }, { status: 400 });
+  }
   try {
     await withUser(session.userId, (tx) =>
       tx.execute(
