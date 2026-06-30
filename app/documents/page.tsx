@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import DocumentsClient from "@/components/editor/DocumentsClient";
 import SignOutButton from "@/components/SignOutButton";
 import { getSession } from "@/lib/auth/session";
 
@@ -16,9 +17,7 @@ export default async function DocumentsPage() {
         <SignOutButton />
       </header>
 
-      <section className="mt-8 rounded-xl border border-dashed border-black/15 p-10 text-center text-neutral-500 dark:border-white/15">
-        Local-first editor lands in the next phase.
-      </section>
+      <DocumentsClient userId={session.userId} />
     </main>
   );
 }

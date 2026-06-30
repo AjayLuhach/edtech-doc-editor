@@ -20,6 +20,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dexie": "^4.4.4",
+    "dexie-react-hooks": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "jose": "^6.2.3",
     "next": "16.2.9",
