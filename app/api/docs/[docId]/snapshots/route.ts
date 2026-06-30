@@ -37,12 +37,22 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ docId:
     return Response.json({ error: "invalid state encoding" }, { status: 400 });
   }
   try {
-    await withUser(session.userId, (tx) =>
-      tx.execute(
+    const result = await withUser(session.userId, async (tx) => {
+      // Ensure the server document exists so snapshots work even before the doc has finished syncing.
+      const roleRows = (await tx.execute(
+        sql`select app_ensure_document(${docId}, ${null}) as role`,
+      )) as unknown as Array<{ role: string | null }>;
+      if (!roleRows[0]?.role) return { forbidden: true as const };
+
+      // RLS WITH CHECK still blocks Viewers from creating snapshots.
+      await tx.execute(
         sql`insert into document_snapshots (document_id, author_id, label, state, upto_seq)
             values (${docId}, ${session.userId}, ${parsed.data.label ?? null}, ${Buffer.from(state)}, ${parsed.data.uptoSeq})`,
-      ),
-    );
+      );
+      return { forbidden: false as const };
+    });
+
+    if (result.forbidden) return Response.json({ error: "forbidden" }, { status: 403 });
     return Response.json({ ok: true });
   } catch (err) {
     if (isRlsDenial(err)) return Response.json({ error: "forbidden" }, { status: 403 });

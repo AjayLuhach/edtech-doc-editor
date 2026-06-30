@@ -7,6 +7,7 @@ import { applyTextDiff } from "@/lib/crdt/text";
 import { renameDocument } from "@/lib/local/repo";
 import SharePanel from "./SharePanel";
 import SyncIndicator from "./SyncIndicator";
+import { useAutoSnapshot } from "./useAutoSnapshot";
 import { useDocAccess } from "./useDocAccess";
 import { useSync } from "./useSync";
 import { useYDoc } from "./useYDoc";
@@ -20,6 +21,7 @@ export default function Editor({ docId }: { docId: string }) {
   const [panel, setPanel] = useState<"none" | "history" | "share">("none");
   const syncStatus = useSync(docId, doc, ready, title);
   const canEdit = role !== "viewer";
+  useAutoSnapshot(docId, doc, ready, canEdit);
 
   // Mirror Yjs into React state; remote/load/restore changes refresh the inputs, local edits don't.
   useEffect(() => {
