@@ -38,7 +38,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
 
       - name: Apply database migrations
         run: npm run db:migrate

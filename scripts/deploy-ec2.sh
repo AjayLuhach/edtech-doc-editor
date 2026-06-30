@@ -46,7 +46,7 @@ EOF
 fi
 
 echo "==> Install deps, migrate, build"
-npm ci
+npm install --no-audit --no-fund
 npm run db:migrate
 npm run build
 
