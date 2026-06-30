@@ -17,7 +17,10 @@ export async function createSession(user: SessionUser): Promise<void> {
   const token = await signSession(user);
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // Secure by default in production; set COOKIE_SECURE=false for a plain-HTTP host (e.g. an EC2 IP).
+    secure: process.env.COOKIE_SECURE
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE,
