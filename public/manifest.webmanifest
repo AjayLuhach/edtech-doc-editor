@@ -1,0 +1,9 @@
+{
+  "name": "Local-first Docs",
+  "short_name": "Docs",
+  "description": "Offline-first collaborative document editor with deterministic sync and version history.",
+  "start_url": "/documents",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#171717"
+}
