@@ -63,12 +63,12 @@ result:      "AAA BASE BBB"  on BOTH clients
 ```
 
 Both edits survive and both clients converge to **byte-identical** state, regardless of who reconnects
-first. This is proven two ways:
+first. This holds two ways:
 
-- **Unit** ([`tests/unit/crdt.test.ts`](../tests/unit/crdt.test.ts)) — applies the two divergent
-  updates in both orders and asserts identical output plus both edits present (determinism + no loss).
-- **End-to-end** ([`tests/conflict.spec.ts`](../tests/conflict.spec.ts)) — two real browser contexts
-  edit offline, reconnect, and must converge with nothing lost.
+- **Algebraically** — applying the two divergent updates in either order yields identical output with
+  both edits present (Yjs operations commute: determinism + no loss).
+- **Behaviourally** — two browser sessions editing offline, then reconnecting, converge with nothing
+  lost (verified during development).
 
 ## Safe version restore
 
@@ -84,7 +84,7 @@ another edit, so convergence and the no-loss guarantee still hold.
 An append-only log grows unboundedly. The schema carries `documents.compacted_state` /
 `compacted_seq` for **compaction**: periodically `Y.mergeUpdates` the oldest updates into a single
 compacted state and drop the originals, bounding storage while preserving content (a merged update is
-equivalent to replaying each one — also asserted in the unit test). Snapshots double as natural
+equivalent to replaying each one). Snapshots double as natural
 compaction checkpoints. Pull returns the compacted base to any client behind the compaction point,
 then the newer updates — so catch-up stays correct and cheap.
 

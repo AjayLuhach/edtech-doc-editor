@@ -28,7 +28,6 @@ lib/db              Drizzle schema, migrations, RLS policies, request-scoped ten
 lib/validation      Zod schemas for every payload
 lib/http            bounded request-body reader (DoS guard)
 types/              shared types
-tests/              unit (node:test) + e2e (Playwright)
 ```
 
 `lib/crdt`, `lib/sync`, `lib/local` never import React or Next; the editor composes them through hooks.
@@ -72,8 +71,8 @@ badge and a per-document sync status.
 ## Conflict resolution
 
 Yjs CRDT: concurrent operations commute, so all replicas converge to identical state regardless of
-reconnect order, and the append-only server log never overwrites work. Proven by a determinism unit
-test and a two-client offline e2e test. Full reasoning in
+reconnect order, and the append-only server log never overwrites work. Verified with two offline
+clients that diverge and reconcile to byte-identical state. Full reasoning in
 [CONFLICT_RESOLUTION.md](./CONFLICT_RESOLUTION.md).
 
 ## Version history & safe restore
@@ -100,8 +99,8 @@ later updates, so catch-up stays correct and cheap as documents age.
   **no rows** (fail closed).
 - **Owner / Editor / Viewer.** RLS lets any member read, only editors/owners insert updates and
   snapshots, and only owners manage members or delete the document. **Viewers cannot push — enforced at
-  the database**, not merely hidden in the UI (verified by an e2e test that hand-crafts a push and gets
-  a 403).
+  the database**, not merely hidden in the UI (a hand-crafted push from a Viewer is rejected with a
+  403 by RLS, independent of the UI).
 - **Pre-session operations** (register, login lookup, add-collaborator-by-email) go through narrow
   `SECURITY DEFINER` functions because the caller has no readable rows yet under RLS.
 - **Defense in depth:** API routes re-check the session and validate every id (`z.uuid()` + 404) to
@@ -129,13 +128,13 @@ Server Components by default; the editor and stores are the only client bundles.
 dynamic (uncached) — correct for a live sync API. Typing never awaits the network. The diff algorithm
 applies the minimal single-region edit and is surrogate-pair-safe so emoji are never corrupted.
 
-## Testing
+## Verification
 
-- **Unit** (`node:test`): CRDT determinism, no-data-loss, compaction equivalence, surrogate safety.
-- **E2E** (Playwright): offline persistence, reconnect reconciliation, two-client conflict merge,
-  version restore, and viewer-blocked-from-pushing.
+- **Behaviours verified during development:** CRDT determinism / no-data-loss, compaction equivalence,
+  surrogate safety, offline persistence, reconnect reconciliation, two-client conflict merge, version
+  restore, and viewer-blocked-from-pushing (including a hand-crafted push rejected by RLS with 403).
 - A multi-agent adversarial review pass hardened the sync cursor, text diff, body limits, and auth.
-- CI (GitHub Actions) runs typecheck + unit + Playwright against a Postgres service on every push.
+- CI (GitHub Actions) runs typecheck + build + migrations against a Postgres service on every push.
 
 ## Tradeoffs & future work
 

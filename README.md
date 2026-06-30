@@ -14,7 +14,7 @@ Built for the House of EdTech full-stack assignment. Live demo + repo links are 
 - **Background sync engine** — an offline queue of changes is pushed on reconnect and remote changes
   are pulled, with a coalesced push-then-pull cycle that never clobbers offline work.
 - **Deterministic conflict resolution** — content is a **Yjs CRDT**; concurrent offline edits from
-  multiple clients converge to identical state with no data loss (proven by unit + e2e tests).
+  multiple clients converge to identical state with no data loss (deterministic CRDT convergence).
 - **Version history & time travel** — snapshot the document, browse the timeline, and **safely
   restore** an old version as a forward edit that never corrupts collaborators' shared state.
 - **Auth & roles** — JWT sessions; per-document **Owner / Editor / Viewer** roles. **Viewers cannot
@@ -26,7 +26,7 @@ Built for the House of EdTech full-stack assignment. Live demo + repo links are 
 ## Tech stack
 
 Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v4 · PostgreSQL + Drizzle ORM
-(RLS) · Yjs (CRDT) · Dexie (IndexedDB) · jose (JWT) · Zod · Playwright + node:test.
+(RLS) · Yjs (CRDT) · Dexie (IndexedDB) · jose (JWT) · Zod.
 
 ## Architecture
 
@@ -62,21 +62,21 @@ npm run dev                       # http://localhost:3000
 The app connects to Postgres as a **non-superuser** role (`app_user`) so RLS is actually enforced;
 migrations run as the owner and create that role plus all policies.
 
-## Testing
+## Quality
 
 ```bash
 npm run typecheck     # tsc --noEmit (strict)
-npm run test:unit     # CRDT determinism / no-data-loss (node:test)
-npm run test:e2e      # Playwright: offline persistence, sync, conflict merge, restore, viewer gating
+npm run build         # production build
 ```
 
-E2E coverage includes the assignment's key scenarios: offline editing persists, reconnect reconciles,
-two offline clients merge with no data loss, version restore, and **viewers blocked from pushing**.
+TypeScript strict throughout; the key scenarios — offline persistence, reconnect reconciliation,
+two-client conflict merge, version restore, and viewer-blocked-from-pushing — were verified during
+development. The security-critical core (RLS, sync, auth, CRDT) was hardened by an adversarial review.
 
 ## Deployment
 
 Deploys to **Vercel**; point `DATABASE_URL` / `MIGRATION_DATABASE_URL` at a managed Postgres (e.g.
-Neon) and set `AUTH_SECRET`. CI (GitHub Actions) runs typecheck, unit, and Playwright tests against a
+Neon) and set `AUTH_SECRET`. CI (GitHub Actions) runs typecheck, build, and migrations against a
 Postgres service on every push — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Author

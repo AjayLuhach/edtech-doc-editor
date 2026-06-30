@@ -14,9 +14,7 @@
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx lib/db/seed.ts",
-    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
-    "test:e2e": "playwright test"
+    "db:seed": "tsx lib/db/seed.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -34,7 +32,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
