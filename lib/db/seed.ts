@@ -34,7 +34,7 @@ async function main() {
   }
 
   const aliceId = await register("alice@demo.com", "Alice", "demo12345");
-  const bobId = await register("bob@demo.com", "Bob", "demo12345");
+  await register("bob@demo.com", "Bob", "demo12345");
 
   const title = "Welcome to Local-first Docs";
   const docId = randomUUID();
