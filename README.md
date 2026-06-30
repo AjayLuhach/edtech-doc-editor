@@ -1,34 +1,85 @@
-# edtech-doc-editor
+# Local-first Docs
 
-House of EdTech — Full-Stack Developer assignment (v2.1).
-**Task:** a Local-First, Collaborative Document Editor with offline sync,
-deterministic conflict resolution, and version history / time-travel.
+A **local-first, collaborative document editor** with offline sync, deterministic conflict
+resolution, and version history. The browser's IndexedDB is the source of truth — you can open, edit,
+and close documents with **zero network blocking the UI**; changes reconcile automatically on
+reconnect and merge **without data loss**.
 
-📄 Full brief + original docs: **[docs/BRIEF.md](docs/BRIEF.md)** (JD + assignment PDFs alongside it).
+Built for the House of EdTech full-stack assignment. Live demo + repo links are in the app footer.
 
-## Deadline & submission
-- **Due: 1 Jul 2026, 2:00 PM** (Natnetra). Tight — consider asking for an extension.
-- Submit: GitHub repo + **live deployment** → https://forms.gle/wVMiwrTcCeKZzHUb6
-- Put **name / GitHub / LinkedIn in the app footer**.
+## Highlights
 
-## Mandatory stack
-Next.js 16 (App Router) · React · TypeScript · Tailwind · PostgreSQL · Git.
-Good-to-have: AI (AI-SDK / OpenAI / Gemini / Groq).
+- **Local-first** — every edit is written to IndexedDB (Dexie) and the in-memory CRDT first; the
+  network is never on the critical path. Edits survive a full reload offline.
+- **Background sync engine** — an offline queue of changes is pushed on reconnect and remote changes
+  are pulled, with a coalesced push-then-pull cycle that never clobbers offline work.
+- **Deterministic conflict resolution** — content is a **Yjs CRDT**; concurrent offline edits from
+  multiple clients converge to identical state with no data loss (proven by unit + e2e tests).
+- **Version history & time travel** — snapshot the document, browse the timeline, and **safely
+  restore** an old version as a forward edit that never corrupts collaborators' shared state.
+- **Auth & roles** — JWT sessions; per-document **Owner / Editor / Viewer** roles. **Viewers cannot
+  push** updates — enforced both in the UI and at the database via row-level security.
+- **Security** — Zod validation and payload-size / OOM guards on every sync endpoint; **PostgreSQL
+  Row-Level Security** with a non-superuser role for strict tenant isolation.
+- **Connection-aware UI** — global online/offline indicator and a per-document sync status.
 
-## What's graded (build for these)
-1. **Local-first store** = source of truth (open/edit/close with zero network blocking).
-2. **Background sync engine** — push local + pull remote on reconnect, never clobber offline edits.
-3. **Deterministic conflict resolution** — merge without data loss.
-4. **Version history + safe restore** (don't corrupt others' shared state).
-5. **Auth + roles** Owner/Editor/Viewer — Viewers can't push updates.
-6. **Security** — validate sync payloads, prevent OOM from malformed payloads, Postgres RLS / tenant isolation.
-7. **UI** — responsive, accessible, **real-time connection-status indicator**, no typing lag.
-8. **Deploy + CI/CD** (Vercel).
+## Tech stack
 
-## Suggested MVP order (if time-boxed)
-local-first editor (IndexedDB) → offline change queue → sync push/pull on reconnect →
-deterministic merge → version snapshot/restore → auth + Owner/Editor/Viewer gating →
-payload validation/RLS → connection-status UI → deploy → (AI add-on if time).
+Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v4 · PostgreSQL + Drizzle ORM
+(RLS) · Yjs (CRDT) · Dexie (IndexedDB) · jose (JWT) · Zod · Playwright + node:test.
 
----
-*Scaffolding to be done in a fresh session.*
+## Architecture
+
+Clean layers with dependencies pointing inward (`lib/*` is framework-agnostic; UI depends on `lib`):
+
+```
+app/            routes + REST route handlers (api)
+components/     small, one-per-file UI
+lib/local       IndexedDB (Dexie) — local source of truth
+lib/crdt        Yjs wrapper + deterministic merge
+lib/sync        offline queue + push/pull reconcile engine
+lib/versions    snapshots + safe restore
+lib/auth        JWT session + role guards
+lib/db          Drizzle schema, migrations, RLS policies
+lib/validation  Zod schemas for every payload
+```
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+[`docs/CONFLICT_RESOLUTION.md`](docs/CONFLICT_RESOLUTION.md) for the full design.
+
+## Local development
+
+Prerequisites: **Node 20.9+** and **Docker** (for Postgres).
+
+```bash
+npm install
+cp .env.example .env.local        # then set AUTH_SECRET: openssl rand -base64 32
+npm run db:up                     # start Postgres in Docker
+npm run db:migrate                # create schema, roles and RLS policies
+npm run dev                       # http://localhost:3000
+```
+
+The app connects to Postgres as a **non-superuser** role (`app_user`) so RLS is actually enforced;
+migrations run as the owner and create that role plus all policies.
+
+## Testing
+
+```bash
+npm run typecheck     # tsc --noEmit (strict)
+npm run test:unit     # CRDT determinism / no-data-loss (node:test)
+npm run test:e2e      # Playwright: offline persistence, sync, conflict merge, restore, viewer gating
+```
+
+E2E coverage includes the assignment's key scenarios: offline editing persists, reconnect reconciles,
+two offline clients merge with no data loss, version restore, and **viewers blocked from pushing**.
+
+## Deployment
+
+Deploys to **Vercel**; point `DATABASE_URL` / `MIGRATION_DATABASE_URL` at a managed Postgres (e.g.
+Neon) and set `AUTH_SECRET`. CI (GitHub Actions) runs typecheck, unit, and Playwright tests against a
+Postgres service on every push — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+## Author
+
+**Ajay Kumar** · [GitHub](https://github.com/AjayLuhach) ·
+[LinkedIn](https://www.linkedin.com/in/ajayluhach7) · [ajayluhach.in](https://ajayluhach.in/)
