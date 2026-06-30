@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FiFileText, FiPlus, FiTrash2 } from "react-icons/fi";
-import { listServerDocs } from "@/lib/docs/api";
+import { deleteServerDoc, listServerDocs } from "@/lib/docs/api";
 import { createLocalDocument } from "@/lib/local/create-document";
 import { deleteDocument, listDocuments } from "@/lib/local/repo";
 import type { Role } from "@/types/auth";
@@ -46,6 +46,17 @@ export default function DocumentsClient({ userId }: { userId: string }) {
     }
   }
 
+  // Remove the local copy and delete on the server, and drop it from the merged list immediately.
+  async function onDelete(id: string) {
+    setServerDocs((prev) => prev.filter((d) => d.id !== id));
+    await deleteDocument(id);
+    try {
+      await deleteServerDoc(id);
+    } catch {
+      // offline: the local copy is gone; the server delete retries are out of scope
+    }
+  }
+
   return (
     <div className="mt-6 flex flex-col gap-4">
       <button
@@ -79,8 +90,8 @@ export default function DocumentsClient({ userId }: { userId: string }) {
               </Link>
               <button
                 type="button"
-                aria-label={`Remove ${doc.title} from this device`}
-                onClick={() => deleteDocument(doc.id)}
+                aria-label={`Delete ${doc.title}`}
+                onClick={() => onDelete(doc.id)}
                 className="rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
               >
                 <FiTrash2 aria-hidden className="h-4 w-4" />

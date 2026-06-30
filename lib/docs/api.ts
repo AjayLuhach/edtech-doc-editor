@@ -47,3 +47,8 @@ export async function addMember(
 export async function removeMember(docId: string, userId: string): Promise<void> {
   await fetch(`/api/docs/${docId}/members/${userId}`, { method: "DELETE" });
 }
+
+// Delete the document on the server (owner only; RLS makes it a no-op for others).
+export async function deleteServerDoc(docId: string): Promise<void> {
+  await fetch(`/api/docs/${docId}`, { method: "DELETE" });
+}

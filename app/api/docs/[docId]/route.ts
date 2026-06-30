@@ -19,3 +19,15 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ docId:
   if (rows.length === 0 || !rows[0].role) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json({ title: rows[0].title, role: rows[0].role });
 }
+
+// Delete the document. RLS only lets the owner delete; for anyone else it removes 0 rows.
+export async function DELETE(_request: NextRequest, ctx: { params: Promise<{ docId: string }> }) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  const { docId } = await ctx.params;
+  if (!z.uuid().safeParse(docId).success) return Response.json({ error: "invalid id" }, { status: 400 });
+
+  await withUser(session.userId, (tx) => tx.execute(sql`delete from documents where id = ${docId}`));
+  return Response.json({ ok: true });
+}
