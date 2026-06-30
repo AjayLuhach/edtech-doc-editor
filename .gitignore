@@ -54,3 +54,4 @@ PROMPT.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.playwright-mcp/*
