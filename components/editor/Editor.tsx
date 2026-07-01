@@ -1,10 +1,11 @@
 "use client";
 import { type ChangeEvent, useEffect, useState } from "react";
-import { FiClock, FiUsers } from "react-icons/fi";
+import { FiClock, FiUsers, FiZap } from "react-icons/fi";
 import { getContent, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
 import { applyTextDiff } from "@/lib/crdt/text";
 import { renameDocument } from "@/lib/local/repo";
+import AiPanel from "./AiPanel";
 import SharePanel from "./SharePanel";
 import SyncIndicator from "./SyncIndicator";
 import { useAutoSnapshot } from "./useAutoSnapshot";
@@ -18,7 +19,7 @@ export default function Editor({ docId }: { docId: string }) {
   const { role } = useDocAccess(docId);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [panel, setPanel] = useState<"none" | "history" | "share">("none");
+  const [panel, setPanel] = useState<"none" | "history" | "share" | "ai">("none");
   const syncStatus = useSync(docId, doc, ready, title);
   const canEdit = role !== "viewer";
   useAutoSnapshot(docId, doc, ready, canEdit);
@@ -45,20 +46,28 @@ export default function Editor({ docId }: { docId: string }) {
     };
   }, [doc, ready]);
 
-  function onBodyChange(e: ChangeEvent<HTMLTextAreaElement>) {
+  // Write a new body into Yjs (shared by manual typing and AI "Replace body").
+  function applyBodyValue(next: string) {
     if (!doc || !canEdit) return;
-    const next = e.target.value;
     const content = getContent(doc);
     doc.transact(() => applyTextDiff(content, content.toString(), next), ORIGIN_USER);
     setBody(next);
   }
 
-  function onTitleChange(e: ChangeEvent<HTMLInputElement>) {
+  // Write a new title into Yjs + local metadata (shared by manual typing and AI "Use this title").
+  function applyTitleValue(next: string) {
     if (!doc || !canEdit) return;
-    const next = e.target.value;
     doc.transact(() => getMeta(doc).set("title", next), ORIGIN_USER);
     setTitle(next);
     void renameDocument(docId, next);
+  }
+
+  function onBodyChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    applyBodyValue(e.target.value);
+  }
+
+  function onTitleChange(e: ChangeEvent<HTMLInputElement>) {
+    applyTitleValue(e.target.value);
   }
 
   if (!doc || !ready) {
@@ -78,6 +87,15 @@ export default function Editor({ docId }: { docId: string }) {
             <FiClock aria-hidden className="h-4 w-4" />
             History
           </button>
+          <button
+            type="button"
+            onClick={() => setPanel((p) => (p === "ai" ? "none" : "ai"))}
+            aria-expanded={panel === "ai"}
+            className="flex items-center gap-1.5 rounded-lg border border-black/15 px-3 py-1.5 text-sm transition-colors hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+          >
+            <FiZap aria-hidden className="h-4 w-4" />
+            AI
+          </button>
           {role === "owner" && (
             <button
               type="button"
@@ -95,6 +113,17 @@ export default function Editor({ docId }: { docId: string }) {
 
       {panel === "history" && <VersionHistory docId={docId} doc={doc} onClose={() => setPanel("none")} />}
       {panel === "share" && <SharePanel docId={docId} onClose={() => setPanel("none")} />}
+      {panel === "ai" && (
+        <AiPanel
+          docId={docId}
+          title={title}
+          body={body}
+          canEdit={canEdit}
+          onApplyTitle={applyTitleValue}
+          onApplyBody={applyBodyValue}
+          onClose={() => setPanel("none")}
+        />
+      )}
 
       {!canEdit && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
