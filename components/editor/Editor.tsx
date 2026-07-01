@@ -51,13 +51,16 @@ export default function Editor({ docId }: { docId: string }) {
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    const fit = () => {
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
+    // Grow to fit content; never collapse the box to "auto" — that briefly shrinks the page and clamps
+    // the scroll to the top on every keystroke. overflow-hidden means scrollHeight already includes the
+    // overflow, so raising height to it is enough. A fresh textarea starts short (flex-1 / min-h-[60vh]),
+    // so the first pass grows it correctly; on doc switch the component remounts and re-measures.
+    const grow = () => {
+      if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight}px`;
     };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+    grow();
+    window.addEventListener("resize", grow);
+    return () => window.removeEventListener("resize", grow);
   }, [body, ready]);
 
   // Write a new body into Yjs (shared by manual typing and AI "Replace body").
@@ -166,7 +169,7 @@ export default function Editor({ docId }: { docId: string }) {
         onChange={onBodyChange}
         readOnly={!canEdit}
         placeholder="Start writing… your edits are saved locally and work offline."
-        className="min-h-[60vh] w-full resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
+        className="min-h-[60vh] w-full flex-1 resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
       />
     </div>
   );
