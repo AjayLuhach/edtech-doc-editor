@@ -1,5 +1,5 @@
 "use client";
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { FiClock, FiUsers, FiZap } from "react-icons/fi";
 import { getContent, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
@@ -19,6 +19,7 @@ export default function Editor({ docId }: { docId: string }) {
   const { role } = useDocAccess(docId);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [panel, setPanel] = useState<"none" | "history" | "share" | "ai">("none");
   const syncStatus = useSync(docId, doc, ready, title);
   const canEdit = role !== "viewer";
@@ -45,6 +46,19 @@ export default function Editor({ docId }: { docId: string }) {
       meta.unobserve(onMeta);
     };
   }, [doc, ready]);
+
+  // Auto-grow the body textarea to fit its content, so the page scrolls as one document (no nested scrollbar).
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [body, ready]);
 
   // Write a new body into Yjs (shared by manual typing and AI "Replace body").
   function applyBodyValue(next: string) {
@@ -147,11 +161,12 @@ export default function Editor({ docId }: { docId: string }) {
       </label>
       <textarea
         id="doc-body"
+        ref={bodyRef}
         value={body}
         onChange={onBodyChange}
         readOnly={!canEdit}
         placeholder="Start writing… your edits are saved locally and work offline."
-        className="min-h-[60vh] w-full flex-1 resize-none bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
+        className="min-h-[60vh] w-full resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
       />
     </div>
   );
