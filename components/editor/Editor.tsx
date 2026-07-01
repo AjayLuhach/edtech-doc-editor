@@ -20,6 +20,7 @@ export default function Editor({ docId }: { docId: string }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLTextAreaElement>(null);
   const [panel, setPanel] = useState<"none" | "history" | "share" | "ai">("none");
   const syncStatus = useSync(docId, doc, ready, title);
   const canEdit = role !== "viewer";
@@ -47,20 +48,20 @@ export default function Editor({ docId }: { docId: string }) {
     };
   }, [doc, ready]);
 
-  // Auto-grow the body textarea to fit its content, so the page scrolls as one document (no nested scrollbar).
+  // Size the body textarea to its content so the page scrolls as one document (no nested scrollbar).
   useEffect(() => {
     const el = bodyRef.current;
-    if (!el) return;
-    // Grow to fit content; never collapse the box to "auto" — that briefly shrinks the page and clamps
-    // the scroll to the top on every keystroke. overflow-hidden means scrollHeight already includes the
-    // overflow, so raising height to it is enough. A fresh textarea starts short (flex-1 / min-h-[60vh]),
-    // so the first pass grows it correctly; on doc switch the component remounts and re-measures.
-    const grow = () => {
-      if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight}px`;
+    const mirror = mirrorRef.current;
+    if (!el || !mirror) return;
+    // Measure a hidden, content-sized mirror rather than the visible box. The visible textarea therefore
+    // never collapses to remeasure, so the page height — and the window scroll position — stay put while
+    // typing. This handles both growing and shrinking without the flex/scroll pitfalls of sizing in place.
+    const fit = () => {
+      el.style.height = `${mirror.scrollHeight}px`;
     };
-    grow();
-    window.addEventListener("resize", grow);
-    return () => window.removeEventListener("resize", grow);
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
   }, [body, ready]);
 
   // Write a new body into Yjs (shared by manual typing and AI "Replace body").
@@ -92,7 +93,7 @@ export default function Editor({ docId }: { docId: string }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-3">
+    <div className="relative flex flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
@@ -169,7 +170,16 @@ export default function Editor({ docId }: { docId: string }) {
         onChange={onBodyChange}
         readOnly={!canEdit}
         placeholder="Start writing… your edits are saved locally and work offline."
-        className="min-h-[60vh] w-full flex-1 resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
+        className="min-h-[60vh] w-full resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
+      />
+      {/* Hidden content-sized mirror; used only to measure the body height without collapsing the box. */}
+      <textarea
+        ref={mirrorRef}
+        value={body}
+        readOnly
+        aria-hidden
+        tabIndex={-1}
+        className="pointer-events-none invisible absolute left-0 top-0 h-0 min-h-0 w-full resize-none overflow-hidden bg-transparent text-base leading-7"
       />
     </div>
   );
