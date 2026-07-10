@@ -16,8 +16,9 @@ core distributed-systems problem in the assignment.
 
 ## The model: an append-only update log
 
-A document's content is a `Y.Doc` (body text in a `Y.Text`, title in a `Y.Map`). Every edit produces
-a small binary **Yjs update**. We never store "the current text" as the source of truth — we store the
+A document's content is a `Y.Doc` (rich-text body in a `Y.XmlFragment` — the ProseMirror node tree
+that the Tiptap editor binds to — and title in a `Y.Map`; pre-rich-text docs stored a legacy `Y.Text`
+that is migrated on first open). Every edit produces a small binary **Yjs update**. We never store "the current text" as the source of truth — we store the
 **log of updates**:
 
 - **Client** (`lib/local`, IndexedDB via Dexie): every update is appended to a local `updates` table.
@@ -37,14 +38,14 @@ One sync cycle ([`lib/sync/engine.ts`](../lib/sync/engine.ts)):
 
 1. **Push** the offline queue — local updates with `synced = 0`. On success they are marked
    `synced = 1`. They are *kept* locally (still part of the document), only re-flagged.
-2. **Pull** updates with `seq > lastServerSeq`, apply them to the live `Y.Doc`, and advance the
-   cursor.
+2. **Pull** via a **Yjs state-vector diff**: the client sends `encodeStateVector(doc)` — a compact
+   summary of everything it already has — and the server rebuilds the merged document and returns
+   exactly the operations the client is missing.
 
-Pull deliberately runs from the *old* cursor, so it re-fetches the client's own just-pushed updates.
-This is safe and intentional: **Yjs is idempotent** — applying an update already present is a no-op
-that emits no change event — so re-applying our own work costs a little bandwidth but cannot corrupt
-or duplicate state. This keeps the cursor logic trivial and correct even when other clients interleave
-updates between our push and pull.
+Because the diff is computed against the client's actual state (not a sequence cursor), it is
+**gap-free by construction**: an update that committed out of order can never be skipped, and
+re-applying anything the client already has is a no-op (**Yjs is idempotent**), so overlap between
+push and pull cannot corrupt or duplicate state.
 
 Sync is triggered by: local edits (debounced), the browser `online` event (reconnect), and a poll
 interval (REST has no server push). Overlapping triggers are **coalesced** so only one cycle runs at a
@@ -75,8 +76,8 @@ first. This holds two ways:
 Restoring an old version must **not** rewind CRDT history — deleting operations would diverge from
 collaborators who still have them and corrupt the shared state. Instead, restore is a **forward edit**
 ([`lib/versions/snapshot.ts`](../lib/versions/snapshot.ts)): we load the snapshot into a temporary
-doc, read its target text/title, and apply the minimal diff that transforms the *current* content into
-the target. That produces an ordinary update which merges and syncs to everyone — restore is just
+doc, clone its body nodes and title, and overwrite the *current* body with them in one ordinary
+transaction. That produces a normal update which merges and syncs to everyone — restore is just
 another edit, so convergence and the no-loss guarantee still hold.
 
 ## Document state growth over time
@@ -92,12 +93,16 @@ then the newer updates — so catch-up stays correct and cheap.
 
 Update origin (`lib/crdt/origins.ts`) drives persistence so convergence is never broken:
 
-| Origin    | Source                     | Persisted as | Pushed? |
-|-----------|----------------------------|--------------|---------|
-| `user`    | local keystroke            | `synced = 0` | yes     |
-| `restore` | version restore (forward)  | `synced = 0` | yes     |
-| `remote`  | pulled from server         | `synced = 1` | no      |
-| `load`    | replay of stored updates   | not re-saved | no      |
+| Origin      | Source                                     | Persisted as | Pushed? |
+|-------------|--------------------------------------------|--------------|---------|
+| `user`      | title edits, AI apply, legacy migration    | `synced = 0` | yes     |
+| *y-sync*    | Tiptap keystrokes (Collaboration binding)  | `synced = 0` | yes     |
+| `restore`   | version restore (forward)                  | `synced = 0` | yes     |
+| `remote`    | pulled from server                         | `synced = 1` | no      |
+| `load`      | replay of stored updates                   | not re-saved | no      |
+
+The rule is "anything that is not `remote`/`load` is local work": that is what makes the Tiptap
+binding's own transaction origin queue and push correctly without the sync layer knowing about it.
 
 This prevents two failure modes: pushing a remote update back to the server (loops), and forgetting to
 push a local/restore edit (lost work).

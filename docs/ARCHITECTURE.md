@@ -17,7 +17,7 @@ This document explains the design; merge specifics are in
 ## Layers
 
 ```
-app/                routes + REST route handlers (api)         ← depends on lib + components
+app/                routes (App Router pages)                  ← depends on lib + components
 components/         small client/server UI components          ← depends on lib
 lib/local           IndexedDB (Dexie): the local source of truth
 lib/crdt            Yjs wrapper: document model + deterministic merge
@@ -26,9 +26,14 @@ lib/versions        snapshots + safe restore
 lib/auth            JWT session + role helpers
 lib/db              Drizzle schema, migrations, RLS policies, request-scoped tenant context
 lib/validation      Zod schemas for every payload
-lib/http            bounded request-body reader (DoS guard)
+lib/*/actions.ts    Server Actions — the whole client↔server API (no REST route handlers)
 types/              shared types
 ```
+
+Each domain module pairs a `"use server"` actions file (session check + validation + SQL) with a thin
+client adapter (`lib/*/api.ts`) that maps its typed results onto what the hooks expect, so transport
+details never leak into components. Binary Yjs payloads cross the boundary as raw `Uint8Array`s —
+React's serialization handles typed arrays natively, so there is no base64 layer.
 
 `lib/crdt`, `lib/sync`, `lib/local` never import React or Next; the editor composes them through hooks.
 
@@ -47,18 +52,24 @@ server never has to understand document structure.
 
 ## Local-first store
 
-Each document is one `Y.Doc` (body in a `Y.Text`, title in a `Y.Map`). Every edit emits a binary
-update that is appended to Dexie's `updates` table and, on load, the doc is rebuilt with
+Each document is one `Y.Doc` (rich-text body in a `Y.XmlFragment`, title in a `Y.Map`). Every edit
+emits a binary update that is appended to Dexie's `updates` table and, on load, the doc is rebuilt with
 `Y.mergeUpdates`. Typing only touches memory + an async IndexedDB write, so there is **no client-side
-lag** and edits **survive reload offline**. React state mirrors the CRDT via observers; local edits
-update the textarea directly (no caret jump) while remote/restore changes refresh it.
+lag** and edits **survive reload offline**.
+
+The editor is **Tiptap (ProseMirror) bound directly to the Yjs fragment** via the Collaboration
+extension: keystrokes become CRDT operations, remote updates flow back into the view without caret
+jumps, and undo is Yjs-aware (undoes only your own changes, never a collaborator's). Documents created
+before the rich-text editor stored the body as a `Y.Text`; on first open by an editor, a one-time
+migration lifts that text into fragment paragraphs and flags the doc (`lib/crdt/richbody.ts`).
 
 ## Sync engine
 
 A reconcile cycle (`lib/sync/engine.ts`):
 
-1. **Push** the offline queue (local updates with `synced = 0`) to `POST /api/docs/:id/push`, then
-   mark them synced. The server bootstraps the document on first push and appends each update.
+1. **Push** the offline queue (local updates with `synced = 0`) through the `pushAction` server
+   action, then mark them synced. The server bootstraps the document on first push and appends each
+   update.
 2. **Pull** via a **Yjs state-vector diff**: the client sends `encodeStateVector(doc)`, the server
    rebuilds the document from `compacted_state` + later updates and returns exactly the ops the client
    is missing. This is **gap-free by construction** — unlike a sequence-number cursor, it cannot skip
@@ -78,8 +89,9 @@ clients that diverge and reconcile to byte-identical state. Full reasoning in
 ## Version history & safe restore
 
 Snapshots store the full Yjs state with an author and label. **Restore is a forward edit**, not a
-history rewind: the snapshot's content is diffed onto the live document and applied as a normal update,
-so it merges and syncs to collaborators without corrupting shared state.
+history rewind: the snapshot's body nodes replace the live fragment inside one ordinary transaction,
+so it merges and syncs to collaborators without corrupting shared state. Snapshots that predate the
+rich-text editor are lifted from plain text into paragraphs on the fly.
 
 ## Document state growth over time
 
@@ -103,30 +115,32 @@ later updates, so catch-up stays correct and cheap as documents age.
   403 by RLS, independent of the UI).
 - **Pre-session operations** (register, login lookup, add-collaborator-by-email) go through narrow
   `SECURITY DEFINER` functions because the caller has no readable rows yet under RLS.
-- **Defense in depth:** API routes re-check the session and validate every id (`z.uuid()` + 404) to
-  block IDOR; the `proxy.ts` redirect is optimistic UX only, never the security boundary.
+- **Defense in depth:** server actions are public POST endpoints, so every action re-checks the
+  session and validates every id (`z.uuid()`) to block IDOR; the `proxy.ts` redirect is optimistic UX
+  only, never the security boundary.
 - **Lesson encoded in the schema:** `INSERT … ON CONFLICT` evaluates RLS `WITH CHECK` against a STABLE
   function in a way that fails even valid rows, so document/member bootstrap uses DEFINER functions
   instead of upserts under RLS.
 
 ## Validation & DoS guards
 
-Every payload is parsed with Zod (array/string caps). Bodies are read through a **bounded streaming
-reader** with a hard byte budget, so a missing or forged `Content-Length` (chunked encoding) cannot
-exhaust memory. Base64 decoding is wrapped so malformed input returns 400, not 500. Login runs bcrypt
-against a real dummy hash on the not-found path to avoid a timing oracle for user enumeration.
+Every payload is parsed with Zod (byte-length caps on every `Uint8Array`, array/string caps
+elsewhere), and Next's `serverActions.bodySizeLimit` bounds the raw request before it is parsed.
+Errors cross the boundary as typed result codes, never thrown (production masks thrown messages).
+Login runs bcrypt against a real dummy hash on the not-found path to avoid a timing oracle for user
+enumeration.
 
 ## Auth
 
 Stateless JWT (HS256 via `jose`) in an httpOnly, SameSite=Lax cookie; `getSession()` is the single,
-request-cached verification point used by pages and route handlers. Passwords are bcrypt (pure-JS, so
+request-cached verification point used by pages and server actions. Passwords are bcrypt (pure-JS, so
 no native build on Vercel).
 
 ## Performance
 
-Server Components by default; the editor and stores are the only client bundles. Sync endpoints are
-dynamic (uncached) — correct for a live sync API. Typing never awaits the network. The diff algorithm
-applies the minimal single-region edit and is surrogate-pair-safe so emoji are never corrupted.
+Server Components by default; the editor and stores are the only client bundles. Server actions are
+dynamic (uncached) — correct for a live sync API. Typing never awaits the network: ProseMirror
+transactions map to minimal Yjs operations through the Collaboration binding.
 
 ## Verification
 
@@ -138,7 +152,7 @@ applies the minimal single-region edit and is surrogate-pair-safe so emoji are n
 
 ## Tradeoffs & future work
 
-- **REST poll, not realtime.** Sync is push/pull on an interval; a `y-websocket` / PartyKit layer for
+- **Polled sync, not realtime.** Sync is push/pull on an interval; a `y-websocket` / PartyKit layer for
   live cursors and presence is the natural next step (kept out of scope to nail the offline core first).
-- **Title is last-writer-wins** within the CRDT map; body merges character-by-character.
+- **Title is last-writer-wins** within the CRDT map; body merges per-character/per-node.
 - **Compaction is threshold-triggered**; a scheduled job could compact idle documents too.
