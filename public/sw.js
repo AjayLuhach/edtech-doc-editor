@@ -15,11 +15,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;
+  if (req.method !== "GET") return; // server actions are POSTs — always network (auth + freshness)
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/")) return; // sync API is always network (auth + freshness)
 
   // Immutable build assets: cache-first.
   if (url.pathname.startsWith("/_next/static/")) {

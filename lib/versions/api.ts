@@ -1,5 +1,7 @@
-import { fromBase64, toBase64 } from "@/lib/sync/base64";
 import type { SnapshotMeta } from "@/types/versions";
+import { createSnapshotAction, getSnapshotStateAction, listSnapshotsAction } from "./actions";
+
+// Client adapters over the version server actions; failures surface as exceptions for the panels.
 
 export async function createSnapshot(
   docId: string,
@@ -7,22 +9,18 @@ export async function createSnapshot(
   uptoSeq: number,
   label?: string,
 ): Promise<void> {
-  const res = await fetch(`/api/docs/${docId}/snapshots`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ label, uptoSeq, state: toBase64(state) }),
-  });
-  if (!res.ok) throw new Error(`save version failed: ${res.status}`);
+  const res = await createSnapshotAction(docId, state, uptoSeq, label);
+  if (!res.ok) throw new Error(`save version failed: ${res.error}`);
 }
 
 export async function listSnapshots(docId: string): Promise<SnapshotMeta[]> {
-  const res = await fetch(`/api/docs/${docId}/snapshots`);
-  if (!res.ok) throw new Error(`load versions failed: ${res.status}`);
-  return ((await res.json()) as { snapshots: SnapshotMeta[] }).snapshots;
+  const res = await listSnapshotsAction(docId);
+  if (!res.ok) throw new Error(`load versions failed: ${res.error}`);
+  return res.snapshots;
 }
 
 export async function getSnapshotState(docId: string, snapshotId: string): Promise<Uint8Array> {
-  const res = await fetch(`/api/docs/${docId}/snapshots/${snapshotId}`);
-  if (!res.ok) throw new Error(`load version failed: ${res.status}`);
-  return fromBase64(((await res.json()) as { state: string }).state);
+  const res = await getSnapshotStateAction(docId, snapshotId);
+  if (!res.ok) throw new Error(`load version failed: ${res.error}`);
+  return res.state;
 }

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-// Full-document state can be sizeable; cap it and also reject oversized bodies at the route.
+// Full-document state can be sizeable; cap it here and via the server-action bodySizeLimit.
 export const snapshotSchema = z.object({
   label: z.string().max(200).optional(),
-  state: z.string().min(1).max(5_000_000).regex(/^[A-Za-z0-9+/]*={0,2}$/),
+  state: z.instanceof(Uint8Array).refine((u) => u.byteLength > 0 && u.byteLength <= 4_000_000),
   uptoSeq: z.number().int().min(0),
 });
 

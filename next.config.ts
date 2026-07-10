@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["postgres", "yjs", "@aws-sdk/client-bedrock-runtime"],
   // Compile-time-checked Link/router hrefs.
   typedRoutes: true,
+  // Snapshots ship full Yjs document states through server actions; raise the default 1 MB body cap.
+  experimental: { serverActions: { bodySizeLimit: "8mb" } },
 };
 
 export default nextConfig;
