@@ -9,7 +9,8 @@ export default function proxy(req: NextRequest) {
   const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
 
-  if (isProtected && !hasSession) {
+  // Only redirect navigations — server-action POSTs must reach the action, which returns a clean 401.
+  if (isProtected && !hasSession && req.method === "GET") {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
   return NextResponse.next();

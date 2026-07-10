@@ -23,7 +23,8 @@ export default async function DocumentPage({ params }: { params: Promise<{ docId
         <FiArrowLeft aria-hidden className="h-4 w-4" />
         All documents
       </Link>
-      <Editor docId={docId} />
+      {/* Keyed by id so per-document state (editor binding, migration gate) resets on navigation. */}
+      <Editor key={docId} docId={docId} />
     </main>
   );
 }

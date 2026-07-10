@@ -60,11 +60,17 @@ export async function listSnapshotsAction(docId: string): Promise<ActionResult<{
           where s.document_id = ${docId}
           order by s.created_at desc limit 100`,
     ),
-  )) as unknown as Array<{ id: string; label: string | null; created_at: string; author_name: string | null }>;
+  )) as unknown as Array<{ id: string; label: string | null; created_at: string | Date; author_name: string | null }>;
 
+  // The driver returns Date objects for timestamptz; normalize to the ISO string the client type declares.
   return {
     ok: true,
-    snapshots: rows.map((r) => ({ id: r.id, label: r.label, authorName: r.author_name, createdAt: r.created_at })),
+    snapshots: rows.map((r) => ({
+      id: r.id,
+      label: r.label,
+      authorName: r.author_name,
+      createdAt: new Date(r.created_at).toISOString(),
+    })),
   };
 }
 

@@ -12,7 +12,8 @@ export function useTiptap(doc: Y.Doc, canEdit: boolean): Editor | null {
     {
       extensions: [
         // Collaboration ships its own Yjs-aware undo, so the plain undoRedo history must be off.
-        StarterKit.configure({ undoRedo: false, link: { openOnClick: false } }),
+        // Headings are capped at the levels the UI styles and the toolbar offers.
+        StarterKit.configure({ undoRedo: false, link: { openOnClick: false }, heading: { levels: [1, 2, 3] } }),
         Collaboration.configure({ fragment: getBody(doc) }),
         Placeholder.configure({
           placeholder: "Start writing… your edits are saved locally and work offline.",

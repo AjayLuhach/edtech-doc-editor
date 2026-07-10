@@ -4,7 +4,7 @@ import { type ChangeEvent, useEffect, useState } from "react";
 import { FiClock, FiUsers, FiZap } from "react-icons/fi";
 import { getLegacyText, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
-import { migrateLegacyBody } from "@/lib/crdt/richbody";
+import { migrateBodyOnce } from "@/lib/local/migrate-body";
 import { renameDocument } from "@/lib/local/repo";
 import AiPanel from "./AiPanel";
 import RichBody from "./RichBody";
@@ -19,7 +19,7 @@ import VersionHistory from "./VersionHistory";
 
 export default function Editor({ docId }: { docId: string }) {
   const { doc, ready } = useYDoc(docId);
-  const { role, resolved } = useDocAccess(docId);
+  const { role, resolved, writeConfirmed } = useDocAccess(docId);
   const [title, setTitle] = useState("");
   const [editor, setEditor] = useState<TiptapEditor | null>(null);
   const [migrated, setMigrated] = useState(false);
@@ -40,17 +40,26 @@ export default function Editor({ docId }: { docId: string }) {
     return () => meta.unobserve(onMeta);
   }, [doc, ready]);
 
-  // Upgrade pre-Tiptap docs before the editor binds; also catches legacy text arriving on first sync.
+  // Legacy-body upgrade gate: docs with nothing to migrate open instantly (local-first); only an
+  // unmigrated pre-Tiptap doc waits for role resolution, so a viewer never forges write updates.
   useEffect(() => {
-    if (!doc || !ready || !resolved) return;
-    if (canEdit) migrateLegacyBody(doc);
-    setMigrated(true);
-    if (!canEdit) return;
+    if (!doc || !ready) return;
     const legacy = getLegacyText(doc);
-    const onLegacy = () => migrateLegacyBody(doc);
+    const pending = () => legacy.length > 0 && getMeta(doc).get("bodyMigrated") !== true;
+
+    if (!pending()) setMigrated(true);
+    else if (resolved) {
+      if (writeConfirmed) void migrateBodyOnce(docId, doc).then(() => setMigrated(true));
+      else setMigrated(true); // viewer or offline: show what's synced; an editor upgrades it later
+    }
+
+    // Legacy text arriving on the first sync after mount still gets upgraded.
+    const onLegacy = () => {
+      if (resolved && writeConfirmed && pending()) void migrateBodyOnce(docId, doc);
+    };
     legacy.observe(onLegacy);
     return () => legacy.unobserve(onLegacy);
-  }, [doc, ready, resolved, canEdit]);
+  }, [docId, doc, ready, resolved, writeConfirmed]);
 
   // Replace the whole body (AI "Replace body"); flows through the Yjs binding like any edit.
   function applyBodyValue(next: string) {
@@ -116,7 +125,7 @@ export default function Editor({ docId }: { docId: string }) {
         <AiPanel
           docId={docId}
           title={title}
-          getBody={() => editor?.getText() ?? ""}
+          getBody={() => editor?.getText({ blockSeparator: "\n" }) ?? ""}
           canEdit={canEdit}
           onApplyTitle={applyTitleValue}
           onApplyBody={applyBodyValue}

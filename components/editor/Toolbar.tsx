@@ -15,11 +15,18 @@ import {
   LuUndo2,
 } from "react-icons/lu";
 
-type Item = { key: string; icon: IconType; label: string; run: (e: Editor) => void; active?: (e: Editor) => boolean };
+type Item = {
+  key: string;
+  icon: IconType;
+  label: string;
+  run: (e: Editor) => void;
+  active?: (e: Editor) => boolean;
+  enabled?: (e: Editor) => boolean;
+};
 
 const ITEMS: Item[] = [
-  { key: "undo", icon: LuUndo2, label: "Undo", run: (e) => e.chain().focus().undo().run() },
-  { key: "redo", icon: LuRedo2, label: "Redo", run: (e) => e.chain().focus().redo().run() },
+  { key: "undo", icon: LuUndo2, label: "Undo", run: (e) => e.chain().focus().undo().run(), enabled: (e) => e.can().undo() },
+  { key: "redo", icon: LuRedo2, label: "Redo", run: (e) => e.chain().focus().redo().run(), enabled: (e) => e.can().redo() },
   {
     key: "h1",
     icon: LuHeading1,
@@ -44,10 +51,11 @@ const ITEMS: Item[] = [
 ];
 
 export default function Toolbar({ editor }: { editor: Editor | null }) {
-  // Subscribes to editor state so active-button highlights follow the selection.
-  const active = useEditorState({
+  // Subscribes to editor state so active/disabled button states follow the selection.
+  const states = useEditorState({
     editor,
-    selector: ({ editor: e }) => (e ? ITEMS.map((i) => (i.active ? i.active(e) : false)) : null),
+    selector: ({ editor: e }) =>
+      e ? ITEMS.map((i) => ({ active: i.active ? i.active(e) : false, enabled: i.enabled ? i.enabled(e) : true })) : null,
   });
 
   if (!editor) return null;
@@ -62,11 +70,12 @@ export default function Toolbar({ editor }: { editor: Editor | null }) {
           key={item.key}
           type="button"
           aria-label={item.label}
-          aria-pressed={active?.[i] ?? false}
+          aria-pressed={states?.[i]?.active ?? false}
+          disabled={!(states?.[i]?.enabled ?? true)}
           title={item.label}
           onClick={() => item.run(editor)}
-          className={`rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10 ${
-            active?.[i] ? "bg-black/10 dark:bg-white/15" : ""
+          className={`rounded-md p-1.5 transition-colors hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/10 ${
+            states?.[i]?.active ? "bg-black/10 dark:bg-white/15" : ""
           }`}
         >
           <item.icon aria-hidden className="h-4 w-4" />

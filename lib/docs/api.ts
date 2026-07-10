@@ -21,13 +21,17 @@ export async function listServerDocs(): Promise<ServerDoc[]> {
   }
 }
 
-// null when the doc is local-only (not yet on the server) or the user has no access.
-export async function getDocAccess(docId: string): Promise<{ title: string; role: Role } | null> {
+export type DocAccess = { access: { title: string; role: Role } | null; reachable: boolean };
+
+// access=null + reachable=true means the server answered but doesn't know the doc (local-only);
+// reachable=false means we couldn't ask (offline / logged out) and must not assume write access.
+export async function getDocAccess(docId: string): Promise<DocAccess> {
   try {
     const res = await getDocAccessAction(docId);
-    return res.ok ? { title: res.title, role: res.role } : null;
+    if (res.ok) return { access: { title: res.title, role: res.role }, reachable: true };
+    return { access: null, reachable: res.error === "not-found" };
   } catch {
-    return null;
+    return { access: null, reachable: false };
   }
 }
 
