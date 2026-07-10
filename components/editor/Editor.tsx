@@ -1,75 +1,60 @@
 "use client";
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import type { Editor as TiptapEditor } from "@tiptap/react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import { FiClock, FiUsers, FiZap } from "react-icons/fi";
-import { getContent, getMeta, getTitle } from "@/lib/crdt/doc";
+import { getLegacyText, getMeta, getTitle } from "@/lib/crdt/doc";
 import { ORIGIN_USER } from "@/lib/crdt/origins";
-import { applyTextDiff } from "@/lib/crdt/text";
+import { migrateLegacyBody } from "@/lib/crdt/richbody";
 import { renameDocument } from "@/lib/local/repo";
 import AiPanel from "./AiPanel";
+import RichBody from "./RichBody";
 import SharePanel from "./SharePanel";
 import SyncIndicator from "./SyncIndicator";
 import { useAutoSnapshot } from "./useAutoSnapshot";
 import { useDocAccess } from "./useDocAccess";
 import { useSync } from "./useSync";
+import { docFromText } from "./useTiptap";
 import { useYDoc } from "./useYDoc";
 import VersionHistory from "./VersionHistory";
 
 export default function Editor({ docId }: { docId: string }) {
   const { doc, ready } = useYDoc(docId);
-  const { role } = useDocAccess(docId);
+  const { role, resolved } = useDocAccess(docId);
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const mirrorRef = useRef<HTMLTextAreaElement>(null);
+  const [editor, setEditor] = useState<TiptapEditor | null>(null);
+  const [migrated, setMigrated] = useState(false);
   const [panel, setPanel] = useState<"none" | "history" | "share" | "ai">("none");
   const syncStatus = useSync(docId, doc, ready, title);
   const canEdit = role !== "viewer";
   useAutoSnapshot(docId, doc, ready, canEdit);
 
-  // Mirror Yjs into React state; remote/load/restore changes refresh the inputs, local edits don't.
+  // Mirror the Yjs title into the input; remote/load/restore changes refresh it, local edits don't.
   useEffect(() => {
     if (!doc || !ready) return;
-    const content = getContent(doc);
     const meta = getMeta(doc);
     setTitle(getTitle(doc));
-    setBody(content.toString());
-
-    const onContent = (_e: unknown, tr: { origin: unknown }) => {
-      if (tr.origin !== ORIGIN_USER) setBody(content.toString());
-    };
     const onMeta = (_e: unknown, tr: { origin: unknown }) => {
       if (tr.origin !== ORIGIN_USER) setTitle(getTitle(doc));
     };
-    content.observe(onContent);
     meta.observe(onMeta);
-    return () => {
-      content.unobserve(onContent);
-      meta.unobserve(onMeta);
-    };
+    return () => meta.unobserve(onMeta);
   }, [doc, ready]);
 
-  // Size the body textarea to its content so the page scrolls as one document (no nested scrollbar).
+  // Upgrade pre-Tiptap docs before the editor binds; also catches legacy text arriving on first sync.
   useEffect(() => {
-    const el = bodyRef.current;
-    const mirror = mirrorRef.current;
-    if (!el || !mirror) return;
-    // Measure a hidden, content-sized mirror rather than the visible box. The visible textarea therefore
-    // never collapses to remeasure, so the page height — and the window scroll position — stay put while
-    // typing. This handles both growing and shrinking without the flex/scroll pitfalls of sizing in place.
-    const fit = () => {
-      el.style.height = `${mirror.scrollHeight}px`;
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [body, ready]);
+    if (!doc || !ready || !resolved) return;
+    if (canEdit) migrateLegacyBody(doc);
+    setMigrated(true);
+    if (!canEdit) return;
+    const legacy = getLegacyText(doc);
+    const onLegacy = () => migrateLegacyBody(doc);
+    legacy.observe(onLegacy);
+    return () => legacy.unobserve(onLegacy);
+  }, [doc, ready, resolved, canEdit]);
 
-  // Write a new body into Yjs (shared by manual typing and AI "Replace body").
+  // Replace the whole body (AI "Replace body"); flows through the Yjs binding like any edit.
   function applyBodyValue(next: string) {
-    if (!doc || !canEdit) return;
-    const content = getContent(doc);
-    doc.transact(() => applyTextDiff(content, content.toString(), next), ORIGIN_USER);
-    setBody(next);
+    if (editor && canEdit) editor.commands.setContent(docFromText(next));
   }
 
   // Write a new title into Yjs + local metadata (shared by manual typing and AI "Use this title").
@@ -80,15 +65,11 @@ export default function Editor({ docId }: { docId: string }) {
     void renameDocument(docId, next);
   }
 
-  function onBodyChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    applyBodyValue(e.target.value);
-  }
-
   function onTitleChange(e: ChangeEvent<HTMLInputElement>) {
     applyTitleValue(e.target.value);
   }
 
-  if (!doc || !ready) {
+  if (!doc || !ready || !migrated) {
     return <p className="px-1 py-8 text-sm text-neutral-500">Loading document…</p>;
   }
 
@@ -135,7 +116,7 @@ export default function Editor({ docId }: { docId: string }) {
         <AiPanel
           docId={docId}
           title={title}
-          body={body}
+          getBody={() => editor?.getText() ?? ""}
           canEdit={canEdit}
           onApplyTitle={applyTitleValue}
           onApplyBody={applyBodyValue}
@@ -160,27 +141,7 @@ export default function Editor({ docId }: { docId: string }) {
         placeholder="Untitled"
         className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-neutral-400"
       />
-      <label htmlFor="doc-body" className="sr-only">
-        Document body
-      </label>
-      <textarea
-        id="doc-body"
-        ref={bodyRef}
-        value={body}
-        onChange={onBodyChange}
-        readOnly={!canEdit}
-        placeholder="Start writing… your edits are saved locally and work offline."
-        className="min-h-[60vh] w-full resize-none overflow-hidden bg-transparent text-base leading-7 outline-none placeholder:text-neutral-400"
-      />
-      {/* Hidden content-sized mirror; used only to measure the body height without collapsing the box. */}
-      <textarea
-        ref={mirrorRef}
-        value={body}
-        readOnly
-        aria-hidden
-        tabIndex={-1}
-        className="pointer-events-none invisible absolute left-0 top-0 h-0 min-h-0 w-full resize-none overflow-hidden bg-transparent text-base leading-7"
-      />
+      <RichBody doc={doc} canEdit={canEdit} onEditor={setEditor} />
     </div>
   );
 }

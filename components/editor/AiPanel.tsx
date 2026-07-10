@@ -12,7 +12,7 @@ const ACTIONS: Array<{ key: AiAction; label: string }> = [
 export default function AiPanel({
   docId,
   title,
-  body,
+  getBody,
   canEdit,
   onApplyTitle,
   onApplyBody,
@@ -20,7 +20,7 @@ export default function AiPanel({
 }: {
   docId: string;
   title: string;
-  body: string;
+  getBody: () => string;
   canEdit: boolean;
   onApplyTitle: (value: string) => void;
   onApplyBody: (value: string) => void;
@@ -32,7 +32,8 @@ export default function AiPanel({
   const [error, setError] = useState<string | null>(null);
 
   async function run(a: AiAction) {
-    // Title uses the heading too; summarize/improve act on the body.
+    // Title uses the heading too; summarize/improve act on the body (read fresh from the editor).
+    const body = getBody();
     const text = a === "title" ? `${title}\n\n${body}`.trim() : body.trim();
     if (!text) {
       setError("Write something first.");

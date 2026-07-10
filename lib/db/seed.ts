@@ -4,7 +4,8 @@ import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { createDoc, getContent, getMeta } from "@/lib/crdt/doc";
+import { createDoc, getMeta } from "@/lib/crdt/doc";
+import { fillBodyFromText } from "@/lib/crdt/richbody";
 import { encodeState } from "@/lib/crdt/updates";
 
 // Idempotent demo data: two users and a document shared between them.
@@ -40,7 +41,7 @@ async function main() {
   const docId = randomUUID();
   const doc = createDoc();
   getMeta(doc).set("title", title);
-  getContent(doc).insert(0, "This document is shared. Edit it offline — it syncs and merges on reconnect.");
+  fillBodyFromText(doc, "This document is shared. Edit it offline — it syncs and merges on reconnect.");
   const state = encodeState(doc);
   doc.destroy();
 
